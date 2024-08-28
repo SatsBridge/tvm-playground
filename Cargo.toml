@@ -1,0 +1,42 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+authors = ["Broxus team"]
+
+[dependencies]
+log = "0.4.21"
+anyhow = "1.0"
+bigdecimal = "0.4.1"
+clap = { version = "4.0.18", features = ["derive"] }
+hex = "0.4.3"
+rust_decimal = "1"
+tokio = { version = "1.21.2", features = ["sync", "rt-multi-thread", "macros"] }
+url = { version = "2.3.1" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.107"
+chrono = "0.4.38"
+sha2 = "0.10.7"
+
+# Basic types
+ed25519-dalek = { git = "https://github.com/broxus/ed25519-dalek.git" }
+#Payload
+once_cell = "1.19.0"
+ton_abi = { git = "https://github.com/broxus/ton-labs-abi" }
+ton_block = { git = "https://github.com/broxus/ton-labs-block" }
+ton_types = { git = "https://github.com/broxus/ton-labs-types" }
+
+# Nekoton SDK
+nekoton = { git = "https://github.com/broxus/nekoton.git", default-features = true }
+nekoton-abi = { git = "https://github.com/broxus/nekoton.git" }
+nekoton-utils = { git = "https://github.com/broxus/nekoton.git" }
+nekoton-contracts = { git = "https://github.com/broxus/nekoton.git" }
+
+# Keys
+rand = "0.8.5"
+everscale-crypto = "0.1"
+
+# JRPC client
+everscale-rpc-client = { git = "https://github.com/broxus/everscale-jrpc.git" }
+# Alternative
+#nekoton-transport = { git = "https://github.com/broxus/nekoton.git", features = ["jrpc_transport"] }
