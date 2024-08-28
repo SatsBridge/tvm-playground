@@ -5,6 +5,8 @@ edition = "2021"
 authors = ["Broxus team"]
 
 [dependencies]
+bitcoin_hashes = "0.13.0"
+hex-conservative = "0.1.1"
 log = "0.4.21"
 anyhow = "1.0"
 bigdecimal = "0.4.1"

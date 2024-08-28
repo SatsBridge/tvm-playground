@@ -1,10 +1,10 @@
 use nekoton_abi::{
-    BuildTokenValue, EventBuilder, FunctionBuilder, KnownParamType, KnownParamTypePlain, PackAbi,
-    PackAbiPlain, TokenValueExt, UnpackAbi, UnpackAbiPlain, UnpackerError, UnpackerResult,
+    EventBuilder, FunctionBuilder, KnownParamTypePlain, PackAbi,
+    PackAbiPlain, UnpackAbiPlain,
 };
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+
 use ton_abi::{Param, ParamType};
 
 #[derive(Debug, Clone, PackAbi, UnpackAbiPlain, KnownParamTypePlain)]
@@ -196,7 +196,7 @@ pub fn refund() -> &'static ton_abi::Function {
                 kind: ParamType::Expire,
             },
         ];
-        let mut builder = FunctionBuilder::new("refund");
+        let builder = FunctionBuilder::new("refund");
         builder
             .abi_version(ton_abi::contract::ABI_VERSION_2_2)
             .headers(header)
@@ -233,7 +233,7 @@ pub fn route() -> &'static ton_abi::Function {
 pub fn htlc_reset() -> &'static ton_abi::Event {
     static EVENT: OnceCell<ton_abi::Event> = OnceCell::new();
     EVENT.get_or_init(|| {
-        let mut builder = EventBuilder::new("reset");
+        let builder = EventBuilder::new("reset");
         builder
             .abi_version(ton_abi::contract::ABI_VERSION_2_2)
             .build()

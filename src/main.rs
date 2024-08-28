@@ -1,41 +1,36 @@
- use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Result};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::borrow::Cow;
-use std::time::SystemTime;
 
 use bigdecimal::num_bigint::ToBigInt;
 use clap::Parser;
-use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signature, Signer, SIGNATURE_LENGTH};
-use everscale_crypto::ed25519::KeyPair;
+use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signer, SIGNATURE_LENGTH};
+
 use nekoton::core::models::{Expiration, TokenWalletVersion};
-use nekoton::core::utils::make_labs_unsigned_message;
+
 use nekoton::core::token_wallet::{RootTokenContractState, TokenWalletContractState};
-use nekoton::core::ton_wallet::{
-    compute_address, Gift, MultisigType, TonWallet, TransferAction, WalletType, DEFAULT_WORKCHAIN,
-};
+use nekoton::core::ton_wallet::{compute_address, Gift, TransferAction, WalletType};
 use nekoton::crypto::{derive_from_phrase, UnsignedMessage};
-use nekoton::transport::models::{ExistingContract, RawContractState};
-use nekoton_abi::{BigUint128, BuildTokenValue, MessageBuilder, create_boc_or_comment_payload, pack_into_cell};
+use nekoton::transport::models::ExistingContract;
 use nekoton_abi::num_bigint::BigUint;
 use nekoton_abi::PackAbiPlain;
+use nekoton_abi::{pack_into_cell, BigUint128, MessageBuilder};
 use nekoton_contracts::tip3_1;
-use nekoton_utils::{Clock, now_sec_u64, serde_hex_array};
+use nekoton_utils::now_sec_u64;
 use nekoton_utils::{SimpleClock, TrustMe};
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
-use ton_block::{AccountState, GetRepresentationHash, MsgAddressInt, Serializable};
-use ton_types::{AccountId, SliceData, UInt256};
+use ton_block::{GetRepresentationHash, MsgAddressInt};
+use ton_types::{SliceData, UInt256};
 use url::Url;
 
-use crate::htlc::{htlc_forwarder_contract, HTLC};
-use hex::{decode, decode_to_slice, encode, FromHexError};
-use nekoton::core::InternalMessage;
+use crate::htlc::htlc_forwarder_contract;
+use hex::{decode, encode};
+
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use sha2::digest::Output;
@@ -43,12 +38,11 @@ use sha2::{Digest, Sha256};
 
 pub mod abi;
 pub mod build_payload;
+pub mod hash;
 pub mod htlc;
 pub mod models;
 
 const DEFAULT_ABI_VERSION: ton_abi::contract::AbiVersion = ton_abi::contract::ABI_VERSION_2_0;
-const EVER_DECIMALS: u8 = 9;
-const EVER_TICKER: &str = "EVER";
 
 const DEFAULT_EXPIRATION_TIMEOUT: u32 = 120; // sec
 const INITIAL_BALANCE: u64 = 100_000_000; // 0.1 EVER
@@ -220,14 +214,14 @@ enum Token {
 impl FromStr for Token {
     type Err = anyhow::Error;
 
-    fn from_str(input: &str) -> Result<Token, Self::Err> {
+    fn from_str(input: &str) -> Result<Token> {
         match input {
             "WEVER" => Ok(Token::Wever),
             "USDT" => Ok(Token::Usdt),
             "USDC" => Ok(Token::Usdc),
             "DAI" => Ok(Token::Dai),
             "SAT" => Ok(Token::Sat),
-            _ => anyhow::bail!("Invalid token"),
+            _ => bail!("Missing attribute: {}", input),
         }
     }
 }
@@ -294,10 +288,10 @@ fn load_secret_key(path: PathBuf) -> Result<(SecretKey, PublicKey)> {
     let Content { secret, mnemonic } = serde_json::from_str(&data).context("Invalid keys")?;
     match (mnemonic, secret) {
         (None, None) => {
-            panic!("Neither mnemonic nor secret were provided")
+            bail!("Neither mnemonic nor secret were provided")
         }
         (Some(_), Some(_)) => {
-            panic!("Both mnemonic and secret were provided")
+            bail!("Both mnemonic and secret were provided")
         }
         (None, Some(s)) => {
             let sk = SecretKey::from_bytes(s.as_ref())?;
@@ -341,7 +335,7 @@ fn prepare_ever_wallet_transfer(
     let unsigned_message = match action {
         TransferAction::Sign(message) => message,
         TransferAction::DeployFirst => {
-            anyhow::bail!("EverWallet unreachable action")
+            bail!("EverWallet unreachable action")
         }
     };
 
@@ -382,14 +376,14 @@ fn prepare_token_body(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let HTLC_ADDRESS = MsgAddressInt::from_str(
+    let htlc_address = MsgAddressInt::from_str(
         "0:f14283332068aa65506654caaf2afadf73c480c395121974ae77b73fa77fabec", // "now" contract with fixed tests
 
-        //"0:715729daf52135ec21387bfb260a49ec29294ae8fe85b84352fe17626373a624",
-        //"0:1e55eb7e67a21c782a43191f4f80702dbc09ac2a2aec734671e6bdfd49bbdf59", // All checks
-        // "0:6c3ddbac7c1bace04107829d097921c77c25dcab62da364ed321c357a351a09d", // Internal Owner
-        // ExternalOwner
-        //"0:b0ddef39702420236bb8ba8baa361006f9e43a5b7075d15e4d9a2d6abd0d07d8", // no payload size check
+                                                                              //"0:715729daf52135ec21387bfb260a49ec29294ae8fe85b84352fe17626373a624",
+                                                                              //"0:1e55eb7e67a21c782a43191f4f80702dbc09ac2a2aec734671e6bdfd49bbdf59", // All checks
+                                                                              // "0:6c3ddbac7c1bace04107829d097921c77c25dcab62da364ed321c357a351a09d", // Internal Owner
+                                                                              // ExternalOwner
+                                                                              //"0:b0ddef39702420236bb8ba8baa361006f9e43a5b7075d15e4d9a2d6abd0d07d8", // no payload size check
                                                                               //"0:80c0247aee276433bcd79e560c8b16cf781ead978f2bfdbcbb21e2bc87c81f9f", // payload check
                                                                               //wrong token roots all of them
                                                                               //"0:68d9b79433aa20345128ac57477a8f7a42eb3a7999803ab06b41038f6cbdeb1d", // return logic
@@ -450,7 +444,7 @@ async fn main() -> anyhow::Result<()> {
                     let mut balance =
                         Decimal::from_u128(contract.account.storage.balance.grams.as_u128())
                             .trust_me();
-                    balance.set_scale(EVER_DECIMALS as u32)?;
+                    balance.set_scale(9_u32)?;
                     println!("Balance: {} EVER", balance);
                 }
                 None => {
@@ -491,9 +485,9 @@ async fn main() -> anyhow::Result<()> {
                             None,
                         )?;
 
-                        let boc = ton_types::serialize_toc(&payload)?;
+                        let _boc = ton_types::serialize_toc(&payload)?;
 
-                        let meta = SignTransactionMeta::default();
+                        let _meta = SignTransactionMeta::default();
 
                         let keypair: Keypair = Keypair {
                             secret: sk,
@@ -647,9 +641,9 @@ async fn main() -> anyhow::Result<()> {
                                 Some(token_body),
                             )?;
 
-                            let meta = SignTransactionMeta::default();
+                            let _meta = SignTransactionMeta::default();
 
-                            let boc = ton_types::serialize_toc(&payload)?;
+                            let _boc = ton_types::serialize_toc(&payload)?;
 
                             let keypair: Keypair = Keypair {
                                 secret: sk,
@@ -691,7 +685,7 @@ async fn main() -> anyhow::Result<()> {
             counterparty,
             token,
             preimage,
-            expire
+            expire,
         } => {
             let token: Token = Token::from_str(&token)?;
             let token_details = token.details();
@@ -729,7 +723,7 @@ async fn main() -> anyhow::Result<()> {
                         &owner,
                     )?;
 
-                    let htlc_contract = client
+                    let _htlc_contract = client
                         .get_contract_state(&token_details.root, None)
                         .await?
                         .trust_me();
@@ -744,13 +738,13 @@ async fn main() -> anyhow::Result<()> {
                             if sec_bytes.len() == 32 {
                                 compute_sha256(&sec_bytes)
                             } else {
-                                panic!("Decoded bytes are not 32 bytes in length.");
+                                bail!("Decoded bytes are not 32 bytes in length.");
                             }
                         }
-                        Err(e) => panic!("Failed to decode hex: {}", e),
+                        Err(e) => bail!("Failed to decode hex: {}", e),
                     };
 
-                    println!("SHA-256: {}", encode(hashlock.clone()));
+                    println!("SHA-256: {}", encode(hashlock));
 
                     let timelock = now_sec_u64() + expire;
 
@@ -760,14 +754,14 @@ async fn main() -> anyhow::Result<()> {
                         incoming: true,
                         counterparty: destination,
                         hashlock: UInt256::from_slice(&hashlock),
-                        timelock: timelock,
+                        timelock,
                     }
                     .pack();
 
                     let payload_cell = pack_into_cell(&htlc_request, DEFAULT_ABI_VERSION).unwrap();
 
                     let token_body =
-                        prepare_token_body(amount, &owner, &HTLC_ADDRESS, true, payload_cell)?;
+                        prepare_token_body(amount, &owner, &htlc_address, true, payload_cell)?;
 
                     match wtype {
                         WalletType::EverWallet => {
@@ -780,9 +774,9 @@ async fn main() -> anyhow::Result<()> {
                                 Some(token_body),
                             )?;
 
-                            let meta = SignTransactionMeta::default();
+                            let _meta = SignTransactionMeta::default();
 
-                            let boc = ton_types::serialize_toc(&payload)?;
+                            let _boc = ton_types::serialize_toc(&payload)?;
 
                             let keypair: Keypair = Keypair {
                                 secret: sk,
@@ -843,7 +837,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         SubCommand::SendOutboundHtlcTransaction {
-            amount,
+            amount: _,
             counterparty,
             token,
             hashlock,
@@ -855,7 +849,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
 
-            let contract_state = client.get_contract_state(&HTLC_ADDRESS, None).await?;
+            let contract_state = client.get_contract_state(&htlc_address, None).await?;
 
             match contract_state {
                 Some(contract_state) => {
@@ -874,7 +868,7 @@ async fn main() -> anyhow::Result<()> {
                     }
 
                     let token: Token = Token::from_str(&token)?;
-                    let token_details = token.details();
+                    let _token_details = token.details();
                     /*
                     let amount = (BigDecimal::from_str(&amount)? * token_details.factor)
                         .with_scale(0)
@@ -895,17 +889,17 @@ async fn main() -> anyhow::Result<()> {
                             let hash_bytes = compute_sha256(&sec_bytes);
                             UInt256::from_slice(&hash_bytes)
                         }
-                        Some(h) => UInt256::from_str(h.as_str())?
+                        Some(h) => UInt256::from_str(h.as_str())?,
                     };
 
-                    println!("SHA-256: {}", encode(hashlock_input.clone()));
+                    println!("SHA-256: {}", encode(hashlock_input));
 
                     let (function_token, input_token) =
                         MessageBuilder::new(htlc_forwarder_contract::route())
                             .arg(destination.clone())
-                            .arg(amount.clone())
-                            .arg(hashlock_input.clone())
-                            .arg(timelock.clone())
+                            .arg(amount)
+                            .arg(hashlock_input)
+                            .arg(timelock)
                             .build();
 
                     let body = SliceData::load_builder(
@@ -929,7 +923,7 @@ async fn main() -> anyhow::Result<()> {
                         vec![Gift {
                             flags: 3,
                             bounce: true,
-                            destination: HTLC_ADDRESS.clone(),
+                            destination: htlc_address.clone(),
                             amount: ATTACHED_AMOUNT,
                             body: Some(body),
                             state_init: None,
@@ -940,7 +934,7 @@ async fn main() -> anyhow::Result<()> {
                     let unsigned_message = match action {
                         TransferAction::Sign(message) => message,
                         TransferAction::DeployFirst => {
-                            anyhow::bail!("EverWallet unreachable action")
+                            bail!("EverWallet unreachable action")
                         }
                     };
 
@@ -957,10 +951,7 @@ async fn main() -> anyhow::Result<()> {
                         .expect("invalid signature");
                     let message = signed_message.message;
 
-                    println!(
-                        "Sending message '{:?}'...",
-                        message.clone()
-                    );
+                    println!("Sending message '{:?}'...", message.clone());
 
                     println!(
                         "Sending message with hash '{}'...",
@@ -979,7 +970,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("Send status: {:?}", status);
                 }
                 None => {
-                    println!("Account state {} not found", HTLC_ADDRESS);
+                    println!("Account state {} not found", htlc_address);
                 }
             }
         }
@@ -990,7 +981,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
 
-            let contract_state = client.get_contract_state(&HTLC_ADDRESS, None).await?;
+            let contract_state = client.get_contract_state(&htlc_address, None).await?;
 
             match contract_state {
                 Some(contract_state) => {
@@ -1012,7 +1003,7 @@ async fn main() -> anyhow::Result<()> {
 
                     let (function_token, input_token) =
                         MessageBuilder::new(htlc_forwarder_contract::settle())
-                            .arg(preimage_uint.clone())
+                            .arg(preimage_uint)
                             .build();
 
                     let body = SliceData::load_builder(
@@ -1036,7 +1027,7 @@ async fn main() -> anyhow::Result<()> {
                         vec![Gift {
                             flags: 3,
                             bounce: true,
-                            destination: HTLC_ADDRESS.clone(),
+                            destination: htlc_address.clone(),
                             amount: ATTACHED_AMOUNT,
                             body: Some(body),
                             state_init: None,
@@ -1047,7 +1038,7 @@ async fn main() -> anyhow::Result<()> {
                     let unsigned_message = match action {
                         TransferAction::Sign(message) => message,
                         TransferAction::DeployFirst => {
-                            anyhow::bail!("EverWallet unreachable action")
+                            bail!("EverWallet unreachable action")
                         }
                     };
 
@@ -1081,7 +1072,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("Send status: {:?}", status);
                 }
                 None => {
-                    println!("Account state {} not found", HTLC_ADDRESS);
+                    println!("Account state {} not found", htlc_address);
                 }
             }
         }
@@ -1092,7 +1083,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
 
-            let contract_state = client.get_contract_state(&HTLC_ADDRESS, None).await?;
+            let contract_state = client.get_contract_state(&htlc_address, None).await?;
 
             match contract_state {
                 Some(contract_state) => {
@@ -1134,7 +1125,7 @@ async fn main() -> anyhow::Result<()> {
                         vec![Gift {
                             flags: 3,
                             bounce: true,
-                            destination: HTLC_ADDRESS.clone(),
+                            destination: htlc_address.clone(),
                             amount: ATTACHED_AMOUNT,
                             body: Some(body),
                             state_init: None,
@@ -1145,7 +1136,7 @@ async fn main() -> anyhow::Result<()> {
                     let unsigned_message = match action {
                         TransferAction::Sign(message) => message,
                         TransferAction::DeployFirst => {
-                            anyhow::bail!("EverWallet unreachable action")
+                            bail!("EverWallet unreachable action")
                         }
                     };
 
@@ -1179,7 +1170,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("Send status: {:?}", status);
                 }
                 None => {
-                    println!("Account state {} not found", HTLC_ADDRESS);
+                    println!("Account state {} not found", htlc_address);
                 }
             }
         }
@@ -1204,7 +1195,7 @@ async fn main() -> anyhow::Result<()> {
 
             let contract = client.get_contract_state(&address, None).await?;
             match contract {
-                Some(contract) => match wtype {
+                Some(_contract) => match wtype {
                     WalletType::WalletV3 | WalletType::EverWallet => {
                         println!("No need to deploy");
                     }
@@ -1224,6 +1215,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Clone, Copy, Default)]
+#[allow(dead_code)]
 pub struct SignTransactionMeta {
     chain_id: Option<u32>,
     workchain_id: Option<u8>,
@@ -1262,9 +1254,9 @@ fn compute_sha256(data: &[u8]) -> Output<Sha256> {
 /*
 Usage:
 
-                    let state = match client.get_contract_state(&HTLC_ADDRESS, None).await? {
+                    let state = match client.get_contract_state(&htlc_address, None).await? {
                         Some(ec) => ec,
-                        None => panic!("No HTLC contract found")
+                        None => bail!("No HTLC contract found")
                     };
 
 
@@ -1273,7 +1265,7 @@ Usage:
                         &SimpleClock,
                         &pubkey,
                         &state.account,
-                        HTLC_ADDRESS.clone(),
+                        htlc_address.clone(),
                         destination,
                         amount,
                         hashlock_input,
@@ -1298,7 +1290,7 @@ pub fn prepare_routing(
     use nekoton_contracts::wallets::ever_wallet;
 
     if gifts.len() > 4 {
-        return panic!("gifts.len() > MAX_MESSAGES");
+        return bail!("gifts.len() > MAX_MESSAGES");
     }
 
     let mut message =
@@ -1310,10 +1302,10 @@ pub fn prepare_routing(
     match &current_state.storage.state {
         ton_block::AccountState::AccountActive { .. } => {}
         ton_block::AccountState::AccountFrozen { .. } => {
-            return panic!("AccountFrozen");
+            return bail!("AccountFrozen");
         }
         ton_block::AccountState::AccountUninit => {
-            return panic!("AccountUninit");
+            return bail!("AccountUninit");
         }
     };
 
@@ -1381,7 +1373,7 @@ pub fn prepare_routing(
 // Payload test
 //println!("{}", payload.clone());
 //println!("{:?}", payload.clone());
-//panic!("no panic");
+//bail!("no panic");
 //const BOC: &str = "te6ccgEBAQEATAAAk8AFOkpSe4NBB2OYjrhiVa7JbBVXaWi+R/PycKStT4HWcxfRoAh+ST/3cvc3fpUpidy94xfKDpWs9oqTWWvQQLqI8AAAAAAAAAAY";
 //let boc = create_boc_or_comment_payload(BOC).unwrap().into_cell();
 //let target_boc =
