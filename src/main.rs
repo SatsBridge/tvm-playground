@@ -46,7 +46,7 @@ const DEFAULT_ABI_VERSION: ton_abi::contract::AbiVersion = ton_abi::contract::AB
 
 const DEFAULT_EXPIRATION_TIMEOUT: u32 = 120; // sec
 const INITIAL_BALANCE: u64 = 100_000_000; // 0.1 EVER
-const ATTACHED_AMOUNT: u64 = 100_000_000; // 0.1 EVER
+const ATTACHED_AMOUNT: u64 = 200_000_000; // 0.2 EVER
 
 const RPC_ENDPOINT: &str = "https://extension-api.broxus.com/rpc";
 
