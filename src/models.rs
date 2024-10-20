@@ -82,24 +82,6 @@ pub struct PayloadGenerator {
 
 impl PayloadGenerator {
     pub fn generate_payload_meta(&mut self) -> PayloadMeta {
-        /*
-        let payload = &self
-            .htlc_fun
-            .run_local(
-                &SimpleClock,
-                self.htlc.clone(),
-                &self.htlc_request,
-            )
-            .map_err(|x| {
-                log::error!("run_local error {:#?}", x);
-                x
-            })
-            .ok();
-        */
-
-        //let payload_token = self.tokens.htlc_request.get_mut(5).unwrap();
-        //payload_token.value = payload.token_value();
-
         PayloadMeta {
             payload: self
                 .htlc_fun
