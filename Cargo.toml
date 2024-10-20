@@ -29,10 +29,10 @@ ton_block = { git = "https://github.com/broxus/ton-labs-block" }
 ton_types = { git = "https://github.com/broxus/ton-labs-types" }
 
 # Nekoton SDK
-nekoton = { git = "https://github.com/broxus/nekoton.git", default-features = true }
-nekoton-abi = { git = "https://github.com/broxus/nekoton.git" }
-nekoton-utils = { git = "https://github.com/broxus/nekoton.git" }
-nekoton-contracts = { git = "https://github.com/broxus/nekoton.git" }
+nekoton = { git = "https://github.com/broxus/nekoton.git", default-features = true, rev="d70dd09d4d482987541f1816fd3bce970710178c" }
+nekoton-abi = { git = "https://github.com/broxus/nekoton.git", rev="d70dd09d4d482987541f1816fd3bce970710178c" }
+nekoton-utils = { git = "https://github.com/broxus/nekoton.git", rev="d70dd09d4d482987541f1816fd3bce970710178c" }
+nekoton-contracts = { git = "https://github.com/broxus/nekoton.git", rev="d70dd09d4d482987541f1816fd3bce970710178c" }
 
 # Keys
 rand = "0.8.5"
